@@ -9,19 +9,13 @@ Vessel
 #include <unistd.h>
 #include <resolv.h>
 #include <netdb.h>
-#include <malloc.h>
 #include <sys/socket.h>
-#include <sys/eventfd.h>
 #include <netinet/in.h>
 #include <sys/epoll.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-#include "unit.h"
-#include "vessel_test.h"
-#include "../src/networking.h"
-#include "../src/vessel.h"
+#include "networking.h"
+#include "vessel.h"
 
 
 #define ONEMB 1024 * 1024
@@ -29,42 +23,6 @@ Vessel
 
 static int reply_handler(Client *);
 static int request_handler(Client *);
-
-static Config plain_conf = {
-    .epoll_events = 64,
-    .epoll_workers = 4,
-    .addr = "127.0.0.1",
-    .port = "4040",
-    .use_ssl = 0,
-    .acc_handler = NULL,
-    .req_handler = request_handler,
-    .rep_handler = reply_handler
-};
-
-
-static int make_connection(const char *hostname, int port) {   int sd;
-
-    struct hostent *host;
-    struct sockaddr_in addr;
-
-    if ((host = gethostbyname(hostname)) == NULL) {
-        perror(hostname);
-        abort();
-    }
-
-    sd = socket(PF_INET, SOCK_STREAM, 0);
-    bzero(&addr, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
-    addr.sin_addr.s_addr = *(long *) (host->h_addr);
-
-    if (connect(sd, (struct sockaddr *) &addr, sizeof(addr)) != 0) {
-        close(sd);
-        perror(hostname);
-        abort();
-    }
-    return sd;
-}
 
 
 static int reply_handler(Client *client) {
@@ -119,42 +77,20 @@ static int request_handler(Client *client) {
 }
 
 
-static void *start_plain_server(void *x) {
-    start_server(&plain_conf);
-    return NULL;
-}
-
-
-static char *start_plain_client(const char *hostname, const char *portnum) {
-    char buf[6];
-    char *sendstring = "HELLO";
-    ssize_t bytes;
-
-    int server = make_connection(hostname, atoi(portnum));
-    sendall(server, (uint8_t *) sendstring, strlen(sendstring), &bytes);
-    bytes = recv(server, buf, sizeof(buf), 0);
-    buf[bytes] = 0;
-
-    ASSERT("[! Plain client]: Plain client wrong result", strcmp(buf, sendstring) == 0);
-
-    close(server);         /* close socket */
-
-    return 0;
-}
-
-
 int main(int argc, char **argv) {
 
-    pthread_t plain_server;
+    Config plain_conf = {
+        .epoll_events = 64,
+        .epoll_workers = 4,
+        .addr = "127.0.0.1",
+        .port = "4040",
+        .use_ssl = 0,
+        .acc_handler = NULL,
+        .req_handler = request_handler,
+        .rep_handler = reply_handler
+        };
 
-    pthread_create(&plain_server, NULL, start_plain_server, NULL);
-
-    usleep(3000);
-    start_plain_client("127.0.0.1", "4040");
-
-    stop_server();
-
-    pthread_join(plain_server, NULL);
+    start_server(&plain_conf);
 
     return 0;
 }
